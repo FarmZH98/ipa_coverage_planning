@@ -443,7 +443,6 @@ public:
 								cleaned_line.upper_line.push_back(line.lower_line[i]);
 					}
 				}
-
 				// add cleaned line to the grid
 				grid_points.push_back(cleaned_line);
 			}

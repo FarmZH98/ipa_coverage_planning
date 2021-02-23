@@ -1,11 +1,11 @@
 <?xml version="1.0"?>
 <launch>
 
-	<arg name="env_pack" default="$(find cob_default_env_config)" />
-	<arg name="robot_env" default="$(optenv ROBOT_ENV !!NO_ROBOT_ENV_SET!!)"/>
-	<arg name="robot_radius" default="0.5"/>
+	<arg name="env_pack" default="$(find ipa_room_segmentation)" />
+	<arg name="robot_env" default="$(optenv ROBOT_ENV test)"/>
+	<arg name="robot_radius" default="0.105"/>
 	<arg name="coverage_radius" default="0.5"/>
-	<arg name="use_test_maps" default="true"/>
+	<arg name="use_test_maps" default="false"/>
 
 	<!--  -->
 	<node ns="room_exploration" pkg="ipa_room_exploration" type="room_exploration_client" name="room_exploration_client" output="screen">

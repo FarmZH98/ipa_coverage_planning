@@ -59,6 +59,14 @@
 
 
 #include <ipa_room_exploration/room_exploration_action_server.h>
+#include <pluginlib/class_list_macros.h>
+#include "geometry_msgs/PoseStamped.h"
+#include "geometry_msgs/PoseWithCovarianceStamped.h"
+#include "geometry_msgs/PoseArray.h"
+#include <std_msgs/Int32.h>
+
+#include <vector>
+int collectionFlag = 1; //for collecting data in sensor
 
 // constructor
 RoomExplorationServer::RoomExplorationServer(ros::NodeHandle nh, std::string name_of_the_action) :
@@ -78,9 +86,14 @@ RoomExplorationServer::RoomExplorationServer(ros::NodeHandle nh, std::string nam
 	node_handle_.param("map_correction_closing_neighborhood_size", map_correction_closing_neighborhood_size_, 2);
 	std::cout << "room_exploration/map_correction_closing_neighborhood_size = " << map_correction_closing_neighborhood_size_ << std::endl;
 
+	node_handle_.param("planning_mode", planning_mode_, 1);
+	std::cout << "room_exploration/planning_mode = " << planning_mode_ << std::endl;
+	//node_handle_.param("pause_time", pause_time_, 3.0);
+	//std::cout << "room_exploration/pause = " << pause_time_ << std::endl;
+
 	node_handle_.param("return_path", return_path_, true);
 	std::cout << "room_exploration/return_path = " << return_path_ << std::endl;
-	node_handle_.param("execute_path", execute_path_, false);
+	node_handle_.param("execute_path", execute_path_, true);
 	std::cout << "room_exploration/execute_path = " << execute_path_ << std::endl;
 	node_handle_.param("goal_eps", goal_eps_, 0.35);
 	std::cout << "room_exploration/goal_eps = " << goal_eps_ << std::endl;
@@ -195,7 +208,9 @@ RoomExplorationServer::RoomExplorationServer(ros::NodeHandle nh, std::string nam
 
 	// min area for revisiting left sections
 
-	path_pub_ = node_handle_.advertise<nav_msgs::Path>("coverage_path", 2);
+	//path_pub_ = node_handle_.advertise<nav_msgs::Path>("coverage_path", 2);
+	path_pub_ = node_handle_.advertise<geometry_msgs::PoseStamped>("PoseStamped_path", 100);
+
 
 	//Start action server
 	room_exploration_server_.start();
@@ -217,11 +232,16 @@ void RoomExplorationServer::dynamic_reconfigure_callback(ipa_room_exploration::R
 	map_correction_closing_neighborhood_size_ = config.map_correction_closing_neighborhood_size;
 	std::cout << "room_exploration/map_correction_closing_neighborhood_size_ = " << map_correction_closing_neighborhood_size_ << std::endl;
 
+	//planning_mode_ = config.planning_mode;
+	//std::cout << "room_exploration/planning_mode = " << planning_mode_ << std::endl;
+	//pause_ = config.pause;
+	//std::cout << "room_exploration/pause = " << pause_ << std::endl;
+	
 	return_path_ = config.return_path;
 	std::cout << "room_exploration/return_path_ = " << return_path_ << std::endl;
-	execute_path_ = config.execute_path;
-	std::cout << "room_exploration/execute_path_ = " << execute_path_ << std::endl;
-	goal_eps_ = config.goal_eps;
+	//execute_path_ = config.execute_path;
+	//std::cout << "room_exploration/execute_path_ = " << execute_path_ << std::endl;
+	goal_eps_ = config.goal_eps; 
 	std::cout << "room_exploration/goal_eps_ = " << goal_eps_ << std::endl;
 	use_dyn_goal_eps_  = config.use_dyn_goal_eps;
 	std::cout << "room_exploration/use_dyn_goal_eps_ = " << use_dyn_goal_eps_ << std::endl;
@@ -312,7 +332,7 @@ void RoomExplorationServer::dynamic_reconfigure_callback(ipa_room_exploration::R
 	std::cout << "######################################################################################" << std::endl;
 }
 
-
+int count = 0;
 // Function executed by Call.
 void RoomExplorationServer::exploreRoom(const ipa_building_msgs::RoomExplorationGoalConstPtr &goal)
 {
@@ -322,17 +342,18 @@ void RoomExplorationServer::exploreRoom(const ipa_building_msgs::RoomExploration
 	// todo: this is only correct if the map is not rotated
 	const cv::Point2d map_origin(goal->map_origin.position.x, goal->map_origin.position.y);
 	const float map_resolution = goal->map_resolution;	// in [m/cell]
-	const float map_resolution_inverse = 1./map_resolution;
+	const float map_resolution_inverse = 1.0/map_resolution;
 	std::cout << "map origin: " << map_origin << " m       map resolution: " << map_resolution << " m/cell" << std::endl;
 
 	const float robot_radius = goal->robot_radius;
 	const int robot_radius_in_pixel = (robot_radius / map_resolution);
 	std::cout << "robot radius: " << robot_radius << " m   (" << robot_radius_in_pixel << " px)" << std::endl;
 
-	const cv::Point starting_position((goal->starting_position.x-map_origin.x)/map_resolution, (goal->starting_position.y-map_origin.y)/map_resolution);
+	//const cv::Point starting_position((goal->starting_position.x-map_origin.x)/map_resolution, (goal->starting_position.y-map_origin.y)/map_resolution);
+	const cv::Point starting_position((0, 0)); //initial: ((0,0))
 	std::cout << "starting point: (" << goal->starting_position.x << ", " << goal->starting_position.y << ") m   (" << starting_position << " px)" << std::endl;
 
-	planning_mode_ = goal->planning_mode;
+	//planning_mode_ = PLAN_FOR_FOOTPRINT; //planning_mode_ = goal->planning_mode;
 	if (planning_mode_==PLAN_FOR_FOOTPRINT)
 		std::cout << "planning mode: planning coverage path with robot's footprint" <<std::endl;
 	else if (planning_mode_==PLAN_FOR_FOV)
@@ -548,7 +569,7 @@ void RoomExplorationServer::exploreRoom(const ipa_building_msgs::RoomExploration
 	{
 		std::cout << "printing path" << std::endl;
 		cv::Mat fov_path_map;
-		for(size_t step=1; step<exploration_path.size(); ++step)
+		for(size_t step=1; step<exploration_path.size(); ++step) 
 		{
 			fov_path_map = room_map.clone();
 			cv::resize(fov_path_map, fov_path_map, cv::Size(), 2, 2, cv::INTER_LINEAR);
@@ -604,34 +625,85 @@ void RoomExplorationServer::exploreRoom(const ipa_building_msgs::RoomExploration
 			Eigen::Quaterniond quaternion;
 			quaternion = Eigen::AngleAxisd((double)exploration_path[i].theta, Eigen::Vector3d::UnitZ());
 			tf::quaternionEigenToMsg(quaternion, exploration_path_pose_stamped[i].pose.orientation);
+
+			/*path_pub_ = node_handle_.advertise<geometry_msgs::PoseWithCovarianceStamped>("PoseStamped_path", 10000);
+			geometry_msgs::PoseWithCovarianceStamped poseStamped;
+			poseStamped.header.frame_id="map";
+    		poseStamped.header.stamp = ros::Time::now();
+    		poseStamped.pose.pose.position.x = exploration_path_pose_stamped[i].pose.position.x;
+    		poseStamped.pose.pose.position.y = exploration_path_pose_stamped[i].pose.position.y;
+    		poseStamped.pose.pose.position.z = 0;
+    		poseStamped.pose.pose.orientation = exploration_path_pose_stamped[i].pose.orientation;
+    		poseStamped.pose.covariance = {0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.06853892326654787};
+			path_pub_.publish(poseStamped);*/
+
+
+			ros::Rate loop_rate(10); //********
+			path_pub_ = node_handle_.advertise<geometry_msgs::PoseStamped>("PoseStamped_path", 100);
+			geometry_msgs::PoseStamped poseStamped;
+			poseStamped.header.frame_id="map";
+    		poseStamped.header.stamp = ros::Time::now();
+    		poseStamped.pose.position.x = exploration_path_pose_stamped[i].pose.position.x;
+    		poseStamped.pose.position.y = exploration_path_pose_stamped[i].pose.position.y;
+    		poseStamped.pose.position.z = 0;
+    		poseStamped.pose.orientation = exploration_path_pose_stamped[i].pose.orientation;
+    		path_pub_.publish(poseStamped);
+    		ros::spinOnce();
+      		loop_rate.sleep(); //************
+
+			/*path_pub_ = node_handle_.advertise<geometry_msgs::PoseStamped>("PoseStamped_path", 20);
+			geometry_msgs::PoseStamped poseStamped;
+			poseStamped.header.frame_id="map";
+    		poseStamped.header.stamp = ros::Time::now();
+    		poseStamped.pose.position.x = exploration_path_pose_stamped[i].pose.position.x;
+    		poseStamped.pose.position.y = exploration_path_pose_stamped[i].pose.position.y;
+    		poseStamped.pose.position.z = 0;
+    		poseStamped.pose.orientation = exploration_path_pose_stamped[i].pose.orientation;
+    		path_pub_.publish(poseStamped);
+    		ros::Rate loop_rate(0.1);*/
+
+			/*ros::Publisher poseStampedPub = node_handle_.advertise<geometry_msgs::PoseStamped>("poseStampedDsr", 2, true); //start here
+			ros::Rate loop_rate(0.2);
+
+   			//posePub.publish(poseStamped.pose);*/
+
 		}
+
+
 		action_result.coverage_path_pose_stamped = exploration_path_pose_stamped;
 
-		nav_msgs::Path coverage_path;
+		/*nav_msgs::Path coverage_path;
 		coverage_path.header.frame_id = "map";
 		coverage_path.header.stamp = ros::Time::now();
 		coverage_path.poses = exploration_path_pose_stamped;
-		path_pub_.publish(coverage_path);
+		path_pub_.publish(coverage_path);*/
+
 	}
+
+	ROS_INFO("testing 1");
+
 
 	// ***************** III. Navigate trough all points and save the robot poses to check what regions have been seen *****************
 	// [optionally] execute the path
 	if(execute_path_ == true)
 	{
+		ROS_INFO("testing path");
 		navigateExplorationPath(exploration_path, goal->field_of_view, goal->field_of_view_origin, goal->coverage_radius, fitting_circle_center_point_in_meter.norm(),
 					map_resolution, goal->map_origin, grid_spacing_in_pixel, room_map.rows * map_resolution);
 		ROS_INFO("Explored room.");
 	}
 
 	room_exploration_server_.setSucceeded(action_result);
-
+	ROS_INFO("testing 2");
 	return;
+
 }
 
 	// remove unconnected, i.e. inaccessible, parts of the room (i.e. obstructed by furniture), only keep the room with the largest area
 bool RoomExplorationServer::removeUnconnectedRoomParts(cv::Mat& room_map)
 {
 	// create new map with segments labeled by increasing labels from 1,2,3,...
+	ROS_INFO("testing 3");
 	cv::Mat room_map_int(room_map.rows, room_map.cols, CV_32SC1);
 	for (int v=0; v<room_map.rows; ++v)
 	{
@@ -676,6 +748,7 @@ bool RoomExplorationServer::removeUnconnectedRoomParts(cv::Mat& room_map)
 
 void RoomExplorationServer::downsampleTrajectory(const std::vector<geometry_msgs::Pose2D>& path_uncleaned, std::vector<geometry_msgs::Pose2D>& path, const double min_dist_squared)
 {
+	ROS_INFO("testing 4");
 	// clean path from subsequent double occurrences of the same pose
 	path.push_back(path_uncleaned[0]);
 	cv::Point last_added_point(path_uncleaned[0].x, path_uncleaned[0].y);
@@ -699,6 +772,7 @@ void RoomExplorationServer::navigateExplorationPath(const std::vector<geometry_m
 {
 	// ***************** III. Navigate trough all points and save the robot poses to check what regions have been seen *****************
 	// 1. publish navigation goals
+	ROS_INFO("testing 5");
 	std::vector<geometry_msgs::Pose2D> robot_poses;
 	geometry_msgs::Pose2D last_pose;
 	geometry_msgs::Pose2D pose;
@@ -742,6 +816,10 @@ void RoomExplorationServer::navigateExplorationPath(const std::vector<geometry_m
 		}
 		publishNavigationGoal(pose, map_frame_, camera_frame_, robot_poses, distance_robot_fov_middlepoint, temp_goal_eps, true); // eps = 0.35
 		last_pose = pose;
+
+		//ros::Rate rate(0.2); // ROS Rate at 0.2Hz
+		//ros::Duration(7.0).sleep();  // Sleep for one second
+
 	}
 
 	std::cout << "published all navigation goals, starting to check seen area" << std::endl;
@@ -1053,7 +1131,7 @@ bool RoomExplorationServer::publishNavigationGoal(const geometry_msgs::Pose2D& n
 	mv_base_client.sendGoal(move_base_goal);
 
 	// wait until goal is reached or the goal is aborted
-//	ros::Duration sleep_rate(0.1);
+	//	ros::Duration sleep_rate(0.1);
 	tf::TransformListener listener;
 	tf::StampedTransform transform;
 	ros::Duration sleep_duration(0.15); // todo: param
@@ -1082,7 +1160,7 @@ bool RoomExplorationServer::publishNavigationGoal(const geometry_msgs::Pose2D& n
 			if((current_pose.x-map_oriented_pose.x)*(current_pose.x-map_oriented_pose.x) + (current_pose.y-map_oriented_pose.y)*(current_pose.y-map_oriented_pose.y) <= eps*eps)
 				near_pos = true;
 
-			robot_poses.push_back(current_pose);
+			robot_poses.push_back(current_pose); //for revisit areas and some other algoS
 		}
 		catch(tf::TransformException &ex)
 		{
@@ -1096,6 +1174,9 @@ bool RoomExplorationServer::publishNavigationGoal(const geometry_msgs::Pose2D& n
 	if(mv_base_client.getState() == actionlib::SimpleClientGoalState::SUCCEEDED || near_pos == true)
 	{
 		ROS_INFO("current goal could be reached.");
+		collectionFlag = 1;
+		ros::Duration(12.0).sleep();  // Sleep for 11 seconds when near goal
+		collectionFlag = 0;
 		return true;
 	}
 	// if the goal couldn't be reached, find another point around the desired fov-position
@@ -1152,8 +1233,6 @@ bool RoomExplorationServer::publishNavigationGoal(const geometry_msgs::Pose2D& n
 	}
 }
 
-
-
 // main, initializing server
 int main(int argc, char** argv)
 {
@@ -1161,9 +1240,23 @@ int main(int argc, char** argv)
 	ros::Time::init();
 
 	ros::NodeHandle nh("~");
+	ros::Publisher dataFlag = nh.advertise<std_msgs::Int32>("collectionFlag", 100);
+
+	//pause to collect data for first set point
 
 	RoomExplorationServer explorationObj(nh, ros::this_node::getName());
-	ros::spin();
+
+    ros::Rate loop_rate(25); //running at 25Hz
+    ros::spinOnce();
+
+	while (ros::ok()) {
+	    std_msgs::Int32 flag; //0-moving (do nothing), 1-collect data (stopped), 2-compute data and send back(which will then turn back to 0)
+        flag.data = collectionFlag;
+        dataFlag.publish(flag);
+
+        ros::spinOnce();
+        loop_rate.sleep();
+	}
 
 	return 0;
 }

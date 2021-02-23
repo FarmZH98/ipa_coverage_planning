@@ -40,16 +40,16 @@ int main(int argc, char **argv)
 
 	// read params
 	bool use_test_maps;
-	priv_nh.param("use_test_maps", use_test_maps, true);
+	priv_nh.param("use_test_maps", use_test_maps, false);
 	double resolution;
 	priv_nh.param("resolution", resolution, 0.05);
-	std::vector<double> origin (3,0);
+	std::vector<double> origin (0.0,0.0);
 	priv_nh.param("origin", origin, origin);
 	double robot_radius;
-	priv_nh.param("robot_radius", robot_radius, 0.3);
+	priv_nh.param("robot_radius", robot_radius, 0.7);
 	double coverage_radius;
-	priv_nh.param("coverage_radius", coverage_radius, 1.0);
-	std::vector<double> start_pos = {0, 0, 0};
+	priv_nh.param("coverage_radius", coverage_radius, 0.9);
+	std::vector<double> start_pos = {0, 0, 0}; // input the start value here
 	priv_nh.param("starting_position", start_pos, start_pos);
 
 	if (start_pos.size() != 3)
@@ -62,8 +62,8 @@ int main(int argc, char **argv)
 	if (use_test_maps)
 	{
 		// read in test map
-		const std::string test_map_path = ros::package::getPath("ipa_room_segmentation") + "/common/files/test_maps/";
-		image_path = test_map_path + "lab_ipa.png";
+		const std::string test_map_path = ros::package::getPath("ipa_room_segmentation") + "/common/files/project_maps/";
+		image_path = test_map_path + "bigger_map.pgm";
 	}
 	else
 	{
@@ -75,6 +75,10 @@ int main(int argc, char **argv)
 		priv_nh.param<std::string>("robot_env", map_name, "lab_ipa");
 
 		image_path = env_pack_path + "/envs/" + map_name + "/" + file_name;
+
+		//const std::string test_map_path = ros::package::getPath("ipa_room_segmentation") + "/common/files/project_maps/";
+		//image_path = test_map_path + "simple_plan_corrected_new1.pgm";
+		//image_path = test_map_path + "bigger_map.pgm";
 	}
 
 	cv::Mat map_flipped = cv::imread(image_path, 0);
@@ -97,7 +101,7 @@ int main(int argc, char **argv)
 			}
 		}
 	}
-	std::cout << "map-size: " << map.rows << "x" << map.cols << std::endl;
+	std::cout << "map-size: " << map.rows << "x" << map.cols << std::endl; //map.rows=y value, map.cols = x value
 
 //	const std::string topic = "/move_base/global_costmap/costmap";
 //	nav_msgs::OccupancyGrid grid;
@@ -126,7 +130,7 @@ int main(int argc, char **argv)
 //	drc_exp.setConfig("path_eps", 10);
 //	drc_exp.setConfig("cell_size", 10);
 //	drc_exp.setConfig("plan_for_footprint", true);
-//	drc_exp.setConfig("goal_eps", 0.0);
+//  drc_exp.setConfig("goal_eps", 0.0);
 //	drc_exp.setConfig("delta_theta", 0.005);
 
 //	cv::Point2f src_center(map.cols/2.0F, map.rows/2.0F);
@@ -145,9 +149,9 @@ int main(int argc, char **argv)
 	cv_image.toImageMsg(labeling);
 
 	geometry_msgs::Pose map_origin;
-	map_origin.position.x = origin[0];
-	map_origin.position.y = origin[1];
-	map_origin.position.z = origin[2];
+	map_origin.position.x = origin[0];//-map.cols*resolution; //origin[0];
+	map_origin.position.y = origin[1];//-map.rows*resolution; //origin[1];
+	map_origin.position.z = 0; //origin[2];
 
 	geometry_msgs::Pose2D starting_position;
 	starting_position.x = start_pos[0];
@@ -155,15 +159,15 @@ int main(int argc, char **argv)
 	starting_position.theta = start_pos[2];
 
 	std::vector<geometry_msgs::Point32> fov_points(4);
-	fov_points[0].x = 0.04035;		// this field of view represents the off-center iMop floor wiping device
-	fov_points[0].y = -0.136;
-	fov_points[1].x = 0.04035;
-	fov_points[1].y = 0.364;
-	fov_points[2].x = 0.54035;		// todo: this definition is mirrored on x (y-coordinates are inverted) to work properly --> check why, make it work the intuitive way
-	fov_points[2].y = 0.364;
-	fov_points[3].x = 0.54035;
-	fov_points[3].y = -0.136;
-	int planning_mode = 2;	// viewpoint planning
+//	fov_points[0].x = 0.04035;		// this field of view represents the off-center iMop floor wiping device
+//	fov_points[0].y = -0.136;
+//	fov_points[1].x = 0.04035;
+//	fov_points[1].y = 0.364;
+//	fov_points[2].x = 0.54035;		// todo: this definition is mirrored on x (y-coordinates are inverted) to work properly --> check why, make it work the intuitive way
+//	fov_points[2].y = 0.364;
+//	fov_points[3].x = 0.54035;
+//	fov_points[3].y = -0.136;
+//	int planning_mode = 2;	// viewpoint planning
 //	fov_points[0].x = 0.15;		// this field of view fits a Asus Xtion sensor mounted at 0.63m height (camera center) pointing downwards to the ground in a respective angle
 //	fov_points[0].y = 0.35;
 //	fov_points[1].x = 0.15;
@@ -173,15 +177,15 @@ int main(int argc, char **argv)
 //	fov_points[3].x = 1.15;
 //	fov_points[3].y = 0.65;
 //	int planning_mode = 2;	// viewpoint planning
-//	fov_points[0].x = -0.3;		// this is the working area of a vacuum cleaner with 60 cm width
-//	fov_points[0].y = 0.3;
-//	fov_points[1].x = -0.3;
-//	fov_points[1].y = -0.3;
-//	fov_points[2].x = 0.3;
-//	fov_points[2].y = -0.3;
-//	fov_points[3].x = 0.3;
-//	fov_points[3].y = 0.3;
-//	int planning_mode = 1;	// footprint planning
+	fov_points[0].x = -0.5;		// this is the working area of a vacuum cleaner with 100 cm width
+	fov_points[0].y = 0.5;
+	fov_points[1].x = -0.5;
+	fov_points[1].y = -0.5;
+	fov_points[2].x = 0.5;
+	fov_points[2].y = -0.5;
+	fov_points[3].x = 0.5;
+	fov_points[3].y = 0.5;
+	int planning_mode = 1;	// footprint planning
 	geometry_msgs::Point32 fov_origin;
 	fov_origin.x = 0.;
 	fov_origin.y = 0.;
@@ -190,7 +194,7 @@ int main(int argc, char **argv)
 	goal.input_map = labeling;
 	goal.map_resolution = resolution;
 	goal.map_origin = map_origin;
-	goal.robot_radius = robot_radius; // turtlebot, used for sim 0.177, 0.4
+	goal.robot_radius = 0.7; // turtlebot, used for sim 0.177, 0.4
 	goal.coverage_radius = coverage_radius;
 	goal.field_of_view = fov_points;
 	goal.field_of_view_origin = fov_origin;
@@ -218,6 +222,15 @@ int main(int argc, char **argv)
 		std::cout << "coverage_path[" << point << "]: x=" << action_result->coverage_path[point].x << ", y=" << action_result->coverage_path[point].y << ", theta=" << action_result->coverage_path[point].theta << std::endl;
 	}
 	cv::imshow("path", path_map);
+
+	// need to find out how to save an output file
+	/*const std::string mapLocation = ros::package::getPath("ipa_room_segmentation") + "/common/files/project_maps/";
+	   const std::string completeFileNameMap = mapLocation + "mapped_path.pgm" ;
+	   const std::string completeFileNameYaml = mapLocation + "mapped_path.pgm" ;
+	   yaml = open(completeFileNameYaml, "w") ;
+	   cv2.imwrite(completeFileNameMap, res );*/
+	   
+	   
 	cv::waitKey();
 
 	return 0;
