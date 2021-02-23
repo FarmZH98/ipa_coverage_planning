@@ -66,7 +66,7 @@
 #include <std_msgs/Int32.h>
 
 #include <vector>
-int collectionFlag = 1; //for collecting data in sensor
+int collectionFlag = 1; //for collecting data in sensor, test
 
 // constructor
 RoomExplorationServer::RoomExplorationServer(ros::NodeHandle nh, std::string name_of_the_action) :
